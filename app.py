@@ -1,125 +1,134 @@
 import streamlit as st
 import tempfile
 
-# Import your resume parser functions
-from resume_parser import extract_text_from_resume, extract_skills, extract_experience
+from resume_parser import (
+    extract_text_from_resume,
+    extract_skills,
+    extract_experience
+)
+from question_generator import generate_questions
+
 
 # ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="AI Interview Simulator", layout="centered")
+st.set_page_config(
+    page_title="AI Interview Simulator",
+    layout="centered"
+)
 
-# ---------------- CUSTOM CSS (FONT + CLEAN LOOK) ----------------
-st.markdown("""
-<style>
-body {
-    font-size: 18px;
-}
-h1 {
-    font-size: 36px !important;
-}
-h2 {
-    font-size: 26px !important;
-}
-h3 {
-    font-size: 22px !important;
-}
-label, div, span, p {
-    font-size: 18px !important;
-}
-</style>
-""", unsafe_allow_html=True)
 
-# ---------------- APP HEADER (MAIN PROJECT NAME) ----------------
-st.markdown("<h2 style='margin-bottom: 5px;'>AI Interview Simulator</h2>", unsafe_allow_html=True)
-st.markdown("<p style='color: gray; margin-top: 0px;'>Resume Analysis Module</p>", unsafe_allow_html=True)
+# ---------------- HEADER ----------------
+st.markdown("<h2>AI Interview Simulator</h2>", unsafe_allow_html=True)
+st.markdown(
+    "<p style='color:gray'>Resume Analysis & Interview Preparation</p>",
+    unsafe_allow_html=True
+)
 
 st.divider()
 
-# ---------------- PAGE TITLE ----------------
-st.markdown("<h1>Resume Analysis</h1>", unsafe_allow_html=True)
-st.write("Upload your resume to extract skills and estimate experience level.")
 
-st.divider()
+# ---------------- CONSTANTS ----------------
+EXPERIENCE_OPTIONS = ["fresher", "junior", "mid", "senior"]
+
 
 # ---------------- SESSION STATE INIT ----------------
-if "analyzed" not in st.session_state:
-    st.session_state.analyzed = False
+st.session_state.setdefault("analyzed", False)
+st.session_state.setdefault("final_skills", [])
+st.session_state.setdefault("experience", "fresher")
+st.session_state.setdefault("questions", [])
 
-if "final_skills" not in st.session_state:
-    st.session_state.final_skills = []
-
-if "experience" not in st.session_state:
-    st.session_state.experience = ""
 
 # ---------------- FILE UPLOAD ----------------
-uploaded_file = st.file_uploader("Upload Resume (PDF format only)", type=["pdf"])
+st.subheader("Resume Analysis")
 
-if uploaded_file is not None:
-    st.info("Resume uploaded successfully.")
+uploaded_file = st.file_uploader(
+    "Upload your resume (PDF only)",
+    type=["pdf"]
+)
 
-    # Save uploaded file temporarily
+if uploaded_file:
+    st.success("Resume uploaded successfully.")
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         tmp.write(uploaded_file.read())
         temp_path = tmp.name
 
-    # ---------------- ANALYZE BUTTON ----------------
     if st.button("Analyze Resume"):
-        with st.spinner("Analyzing resume, please wait..."):
+        with st.spinner("Analyzing resume..."):
             text = extract_text_from_resume(temp_path)
             skills = extract_skills(text)
             experience = extract_experience(text)
 
-        # Store results in session state
-        st.session_state.final_skills = skills.copy()
+        # Normalize experience safely
+        experience = experience.lower() if experience else "fresher"
+        if experience not in EXPERIENCE_OPTIONS:
+            experience = "fresher"
+
+        st.session_state.final_skills = skills
         st.session_state.experience = experience
         st.session_state.analyzed = True
+        st.session_state.questions = []
 
-# ---------------- SHOW RESULTS ONLY AFTER ANALYSIS ----------------
+
+# ---------------- AFTER ANALYSIS ----------------
 if st.session_state.analyzed:
 
     st.divider()
     st.subheader("Analysis Result")
 
-    # ---------------- SKILLS SECTION ----------------
-    st.write("Detected Skills (editable)")
+    # -------- SKILLS --------
+    st.write("Detected Skills (edit if needed)")
 
-    selected_skills = st.multiselect(
-        "Select the skills you actually have (remove incorrect ones if needed):",
+    st.session_state.final_skills = st.multiselect(
+        "Your skills:",
         options=st.session_state.final_skills,
         default=st.session_state.final_skills
     )
 
-    st.session_state.final_skills = selected_skills
-
-    # ---------------- ADD NEW SKILL (FORM - FIXED) ----------------
-    st.write("Add a missing skill manually")
-
-    with st.form("add_skill_form", clear_on_submit=True):
-        col1, col2 = st.columns([3, 1])
-
-        with col1:
-            new_skill = st.text_input("Enter skill name")
-
-        with col2:
-            submitted = st.form_submit_button("Add Skill")
+    # Add skill manually
+    with st.form("add_skill_form"):
+        new_skill = st.text_input("Add a skill")
+        submitted = st.form_submit_button("Add")
 
         if submitted and new_skill:
             new_skill = new_skill.strip().lower()
-
             if new_skill not in st.session_state.final_skills:
                 st.session_state.final_skills.append(new_skill)
-                st.success(f"Skill added: {new_skill}")
+                st.success(f"Added skill: {new_skill}")
             else:
-                st.warning("This skill is already in the list.")
+                st.warning("Skill already exists.")
 
-    # ---------------- FINAL SKILLS DISPLAY ----------------
-    st.write("Final Confirmed Skills")
-
-    if st.session_state.final_skills:
-        st.write(", ".join(st.session_state.final_skills))
-    else:
-        st.warning("No skills selected.")
-
-    # ---------------- EXPERIENCE SECTION ----------------
+    # -------- EXPERIENCE --------
     st.divider()
-    st.write("Estimated Experience Level")
-    st.success(st.session_state.experience.capitalize())
+    st.write("Experience Level")
+
+    st.session_state.experience = st.selectbox(
+        "Confirm your experience level",
+        EXPERIENCE_OPTIONS,
+        index=EXPERIENCE_OPTIONS.index(
+            st.session_state.experience
+            if st.session_state.experience in EXPERIENCE_OPTIONS
+            else "fresher"
+        )
+    )
+
+    # -------- INTERVIEW QUESTIONS --------
+    st.divider()
+    st.subheader("Interview Question Generator")
+
+    if st.button(
+        "Generate Interview Questions",
+        disabled=not st.session_state.final_skills
+    ):
+        with st.spinner("Generating questions using Gemini..."):
+            st.session_state.questions = generate_questions(
+                st.session_state.final_skills,
+                st.session_state.experience,
+                num_questions=5
+            )
+
+    # -------- SHOW QUESTIONS --------
+    if st.session_state.questions:
+        st.success("Your Interview Questions:")
+
+        for i, q in enumerate(st.session_state.questions, 1):
+            st.write(f"{i}. {q}")

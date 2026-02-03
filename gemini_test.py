@@ -1,11 +1,13 @@
+from google import genai
 import os
-import google.generativeai as genai
 
-# Load API key from environment
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Create client using your API key from environment
+client = genai.Client(api_key=os.getenv("AIzaSyAGZ0hUmOzF8b9f-8y74qwsIkz6xcFlY7M"))
 
-model = genai.GenerativeModel("gemini-1.5-flash")
+response = client.models.generate_content(
+    model="models/gemini-flash-latest",
+    contents="Give me 3 Python interview questions for a fresher"
+)
 
-response = model.generate_content("Give me 3 Python interview questions")
-
+print("\n--- Gemini Response ---\n")
 print(response.text)
