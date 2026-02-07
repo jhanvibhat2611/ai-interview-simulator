@@ -4,31 +4,29 @@ from google import genai
 import os
 
 
-# ---------------- GEMINI CLIENT ----------------
-client = genai.Client(
-    api_key=os.getenv("GOOGLE_API_KEY")
-)
-
-
-# ---------------- MAIN FUNCTION ----------------
 def generate_questions(skills, experience, num_questions=5):
     """
     Generate interview questions using Gemini
     strictly aligned with experience level.
     """
 
+    # -------- API KEY (FETCH AT RUNTIME) --------
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return ["❌ GOOGLE_API_KEY not found. Please set it in environment."]
+
+    client = genai.Client(api_key=api_key)
+
     # -------- VALIDATION --------
     if not skills:
         return ["Please add at least one skill to generate questions."]
 
     experience = (experience or "fresher").lower()
-
     if experience not in ["fresher", "junior", "mid", "senior"]:
         experience = "fresher"
 
     skill_text = ", ".join(skills)
 
-    # -------- EXPERIENCE RULE MAP (anchors Gemini) --------
     experience_rules = {
         "fresher": """
 - Ask ONLY basic conceptual and syntax-level questions
@@ -51,7 +49,6 @@ def generate_questions(skills, experience, num_questions=5):
 """
     }
 
-    # -------- PROMPT --------
     prompt = f"""
 You are a senior technical interviewer.
 
@@ -72,22 +69,20 @@ GLOBAL RULES:
 - No headings
 """
 
-    # -------- GEMINI CALL --------
     response = client.models.generate_content(
         model="models/gemini-flash-latest",
         contents=prompt
     )
 
     if not response or not response.text:
-        return ["Failed to generate questions. Please try again."]
+        return ["❌ Failed to generate questions. Please try again."]
 
-    # -------- CLEAN OUTPUT --------
     questions = [
         q.strip(" .-0123456789")
         for q in response.text.split("\n")
         if q.strip()
     ]
 
-    # Hard guarantee count
     return questions[:num_questions]
+
 
